@@ -1,4 +1,4 @@
 [submodule "carla_msgs"]
 	path = carla_msgs
-	url = https://github.com/hieu-nguyen-tri/ros-carla-msgs
-	branch = hieu/add-ego-traffic-light-message
+	url = https://github.com/ToyotaResearchInstitute/ros-carla-msgs.git
+	branch = master
