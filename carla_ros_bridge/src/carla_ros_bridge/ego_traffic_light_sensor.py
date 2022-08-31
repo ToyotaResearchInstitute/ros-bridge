@@ -70,12 +70,12 @@ def create_stop_line_info_map(node: CompatibleNode, actor_list: Dict[int, Actor]
     return results
 
 
-def get_stop_line_info(stop_line_infos: Dict[int,Dict[int, StoplineInfo]], road_id: int, lane_id: int):
+def get_stop_line_info(stop_line_info: Dict[int,Dict[int, StoplineInfo]], road_id: int, lane_id: int):
     """Given road_id and lane_id, find and return a StopLineInfo object if any."""
-    if stop_line_infos is None:
+    if stop_line_info is None:
         return None
-    if road_id in stop_line_infos and lane_id in stop_line_infos[road_id]:
-        return stop_line_infos[road_id][lane_id]
+    if road_id in stop_line_info and lane_id in stop_line_info[road_id]:
+        return stop_line_info[road_id][lane_id]
     return None
 
 
@@ -95,7 +95,7 @@ class EgoTrafficLightSensor(PseudoActor):
 
         self.map = carla_map
         self.map_name = self.map.name
-        self.ego = self.get_ego(actor_list)
+        self.ego = None
         self.actor_list = actor_list
         self.stop_line_info_map = None
         self.cur_sli = None
@@ -103,8 +103,6 @@ class EgoTrafficLightSensor(PseudoActor):
         self.msg = CarlaEgoTrafficLightInfo()
         self.msg.traffic_light_status = CarlaTrafficLightStatus()
         self.msg.inside_intersection = False
-        if self.ego:
-            self.msg.ego_id = self.ego.id
 
     def destroy(self):
         super(EgoTrafficLightSensor, self).destroy()
@@ -117,32 +115,40 @@ class EgoTrafficLightSensor(PseudoActor):
     def get_blueprint_name():
         return "sensor.pseudo.ego_traffic_light"
 
-    def update(self, frame, timestamp):
+    def update(self, frame: int, timestamp: float):
         try:
-            if self.ego is None or self.map is None:
+            if self.map is None:
+                self.node.logwarn("Carla Map is not assgined")
                 return
 
             if self.stop_line_info_map is None or self.map_name != self.map.name:
                 self.stop_line_info_map = create_stop_line_info_map(self.node, self.actor_list)
                 self.map_name = self.map.name
+                self.ego = self.get_ego(self.actor_list)
+
+            if self.ego is None:
+                self.node.logwarn("Unable to find ego.")
+                return
 
             ego_location = self.ego.get_location()
             wp = self.map.get_waypoint(ego_location)
             sli = get_stop_line_info(self.stop_line_info_map, wp.road_id, wp.lane_id)
 
             inside_intersection = wp.is_junction
+            cur_status = self.cur_sli.traffic_light_actor.get_status() if self.cur_sli else None
+            new_status = sli.traffic_light_actor.get_status() if sli else None
 
             if (self.msg.inside_intersection != inside_intersection
-                or self.has_traffic_light_status_changes(self.cur_sli, sli)
+                or self.has_traffic_light_status_changes(cur_status, new_status)
                 or self._info_published_at is None
                 or timestamp - self._info_published_at > _PUBLISH_INTERVAL_SECONDS
             ):
-                self.calculate_and_publish_data(ego_location, sli, inside_intersection)
+                self.calculate_and_publish_data(ego_location, sli, inside_intersection, timestamp)
                 self._info_published_at = timestamp
         except Exception as e:
             self.node.loginfo("Error: {}".format(e))
 
-    def calculate_and_publish_data(self, ego_location: carla.Location, new_sli: StoplineInfo, inside_intersection: bool):
+    def calculate_and_publish_data(self, ego_location: carla.Location, new_sli: StoplineInfo, inside_intersection: bool, timestamp: float):
         """Publish CarlaEgoTrafficLightInfo message."""
         if inside_intersection:
             self.msg.distance_to_stopline = -1.0
@@ -158,7 +164,9 @@ class EgoTrafficLightSensor(PseudoActor):
             # Store new StopLineInfo.
             self.cur_sli = new_sli
 
+        self.msg.ego_id = self.ego.id
         self.msg.inside_intersection = inside_intersection
+        self.msg.header = self.get_msg_header(timestamp=timestamp)
         self.pub.publish(self.msg)
 
     def get_ego(self, actor_list: Dict[int, Actor]):
@@ -168,11 +176,10 @@ class EgoTrafficLightSensor(PseudoActor):
                 return actor.carla_actor
         return None
 
-    def has_traffic_light_status_changes(self, cur_sli: StoplineInfo, new_sli: StoplineInfo):
-        """Return True if the traffic light status (either new traffic light id or new state) has been changed; False otherwise."""
-        if cur_sli is None or new_sli is None:
+    def has_traffic_light_status_changes(self, cur_traffic_light_status: CarlaTrafficLightStatus, new_traffic_light_status: CarlaTrafficLightStatus):
+        """Return True if the traffic light status (either traffic light id or state) has been changed; False otherwise."""
+        if cur_traffic_light_status is None or new_traffic_light_status is None:
+            # Don't detect changes when one of the status is None.
             return False
 
-        cur_status = cur_sli.traffic_light_actor.get_status()
-        new_status = new_sli.traffic_light_actor.get_status()
-        return cur_status != new_status
+        return cur_traffic_light_status != new_traffic_light_status
