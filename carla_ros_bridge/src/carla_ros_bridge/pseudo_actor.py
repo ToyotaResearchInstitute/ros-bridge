@@ -87,10 +87,10 @@ class PseudoActor(object):
         :return: prefix
         :rtype: string
         """
-        class_name = self.__class__.__name__
-        prefix = "" if self.parent is None else self.parent.get_prefix() + "/"
-        prefix += "{}{}/{}".format(prefix, class_name, self.name)
-        return prefix
+        if self.parent is not None:
+            return self.parent.get_prefix() + "/" + self.name
+        else:
+            return self.name
 
     def get_topic_prefix(self):
         """
