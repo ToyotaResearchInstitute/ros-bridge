@@ -1,5 +1,5 @@
-{   
-    "objects": 
+{
+    "objects":
     [
         {
             "type": "sensor.pseudo.objects",
@@ -12,6 +12,10 @@
         {
             "type": "sensor.pseudo.traffic_lights",
             "id": "traffic_lights"
+        },
+        {
+            "type": "sensor.pseudo.ego_traffic_light",
+            "id": "ego_traffic_light"
         }
     ]
 }

@@ -25,6 +25,7 @@ from carla_ros_bridge.actor_control import ActorControl
 from carla_ros_bridge.actor_list_sensor import ActorListSensor
 from carla_ros_bridge.camera import Camera, RgbCamera, DepthCamera, SemanticSegmentationCamera, DVSCamera
 from carla_ros_bridge.collision_sensor import CollisionSensor
+from carla_ros_bridge.ego_traffic_light_sensor import EgoTrafficLightSensor
 from carla_ros_bridge.ego_vehicle import EgoVehicle
 from carla_ros_bridge.gnss import Gnss
 from carla_ros_bridge.imu import ImuSensor
@@ -106,7 +107,7 @@ class ActorFactory(object):
         destroyed_actors = self._active_actors - current_actors
         self._active_actors = current_actors
 
-        # Create/destroy actors not managed by the bridge. 
+        # Create/destroy actors not managed by the bridge.
         self.lock.acquire()
         for actor_id in spawned_actors:
             carla_actor = self.world.get_actor(actor_id)
@@ -353,6 +354,16 @@ class ActorFactory(object):
                                  name=name,
                                  parent=parent,
                                  node=self.node)
+
+        elif type_id == EgoTrafficLightSensor.get_blueprint_name():
+            actor = EgoTrafficLightSensor(
+                uid=uid,
+                name=name,
+                parent=parent,
+                node=self.node,
+                actor_list=self.actors,
+                carla_map=self.world.get_map()
+            )
 
         elif carla_actor.type_id.startswith('traffic'):
             if carla_actor.type_id == "traffic.traffic_light":
